@@ -93,7 +93,7 @@ class RetailcrmClasspathBuilder
             'RetailCrmCorporateClient' => 'RetailCrmCorporateClient.php'
         ],
         'lib/icml' => [
-            'IcmlDirector' => 'icmldirector.php'
+            'XmlOfferBuilder' => 'xmlofferbuilder.php'
         ]
     ];
 

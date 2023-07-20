@@ -25,6 +25,11 @@ use RetailcrmConfigProvider;
 class XmlOfferBuilder
 {
     /**
+     * @var self $instance
+     */
+    private static $instance;
+
+    /**
      * @var \Intaro\RetailCrm\Model\Bitrix\Xml\XmlSetup
      */
     private $setup;
@@ -93,6 +98,22 @@ class XmlOfferBuilder
      * @var array
      */
     private $vatRates;
+
+    public static function getInstance(XmlSetup $setup, array $measure, ?string $defaultServerName)
+    {
+        if (empty(self::$instance)
+            || (self::$instance instanceof self
+            && (self::$instance->setup != $setup
+                    || self::$instance->measures !== $measure
+                    || self::$instance->defaultServerName !== $defaultServerName
+                )
+            )
+        ) {
+            self::$instance = new XmlOfferBuilder($setup, $measure, $defaultServerName);
+        }
+
+        return self::$instance;
+    }
 
     /**
      * IcmlDataManager constructor.

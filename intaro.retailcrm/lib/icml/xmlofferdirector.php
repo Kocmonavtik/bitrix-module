@@ -38,7 +38,7 @@ class XmlOfferDirector
     /**
      * @var \Intaro\RetailCrm\Icml\XmlOfferBuilder
      */
-    private       $xmlOfferBuilder;
+    private $xmlOfferBuilder;
 
     /**
      * @var array
@@ -54,7 +54,7 @@ class XmlOfferDirector
         $this->setup = $setup;
         $this->fileRepository = new FileRepository(SiteRepository::getDefaultServerName());
         $this->catalogRepository = new CatalogRepository();
-        $this->xmlOfferBuilder = new XmlOfferBuilder(
+        $this->xmlOfferBuilder = XmlOfferBuilder::getInstance(
             $setup,
             MeasureRepository::getMeasures(),
             SiteRepository::getDefaultServerName()
