@@ -101,6 +101,7 @@ class IcmlWriter
      */
     public function writeOffers(array $offers, $isNotActiveProduct = false): void
     {
+        //здесь моих парамтеров уже нету
         foreach ($offers as $offer) {
             $this->writeOffer($offer, $isNotActiveProduct);
         }

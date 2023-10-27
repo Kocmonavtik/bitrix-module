@@ -37,8 +37,10 @@ if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/bitrix/php_interface/retailcrm/exp
         }
     }
 
-    $iblockProperties = [
-        'article'      => 'article',
+    //$settingService = \Intaro\RetailCrm\Icml\SettingsService::getInstance([], null);
+    $iblockProperties = \Intaro\RetailCrm\Icml\SettingsService::getIblockPropsPreset();//$settingService->getIblockPropsPreset();
+
+      /*  'article'      => 'article',
         'manufacturer' => 'manufacturer',
         'color'        => 'color',
         'weight'       => 'weight',
@@ -46,7 +48,9 @@ if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/bitrix/php_interface/retailcrm/exp
         'length'       => 'length',
         'width'        => 'width',
         'height'       => 'height',
-    ];
+        'test' => 'test',
+        'test1' => 'test1'
+    ];*/
 
     $iblockPropertySku = [];
     $iblockPropertySkuHl = [];
@@ -115,6 +119,9 @@ if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/bitrix/php_interface/retailcrm/exp
             }
         }
     }
+
+    var_dump($iblockPropertyProduct);
+    die();
 
     $productPictures = [];
 

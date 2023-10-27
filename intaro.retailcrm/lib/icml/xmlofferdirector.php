@@ -101,9 +101,9 @@ class XmlOfferDirector
         CatalogIblockInfo $catalogIblockInfo,
         XmlOffer $product
     ): array {
-        $xmlOffers = $this->getXmlOffersPart($paramsForOffer, $catalogIblockInfo);
+        $xmlOffers = $this->getXmlOffersPart($paramsForOffer, $catalogIblockInfo);//тут перезапись юнита происходит
 
-        return $this->addProductInfo($xmlOffers, $product);
+        return $this->addProductInfo($xmlOffers, $product);//здесь заменяется продуктовый на оферный по наличию кода
     }
 
     /**

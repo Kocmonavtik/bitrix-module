@@ -246,7 +246,8 @@ class IcmlDirector
         $paramsForOffer->pageNumber = 1;
         $writingOffersCount = 0;
         $paramsForOffer->parentId = $product->id;
-        $paramsForOffer->allParams = array_merge($paramsForOffer->configurable, $paramsForOffer->main);
+        $paramsForOffer->allParams = array_merge($paramsForOffer->configurable, $paramsForOffer->main);//здесб объединяется в один массив
+        //попробовать добавить ещё 1 массив для передачи туда code => name для работы с динамичный рядом значений. вроде нормальное решение
 
         do {
             $isNotActiveProduct = false;

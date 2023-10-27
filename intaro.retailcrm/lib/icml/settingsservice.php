@@ -239,7 +239,7 @@ class SettingsService
     /**
      * @return string[]
      */
-    public function getIblockPropsPreset(): array
+    public static function getIblockPropsPreset(): array
     {
         return [
             'article'      => 'article',
@@ -251,13 +251,16 @@ class SettingsService
             'width'        => 'width',
             'height'       => 'height',
             'picture'      => 'picture',
+            'test' => 'test',
+            'test1' => 'test1',
+            'test11' => 'test11'
         ];
     }
 
     /**
      * @return array
      */
-    public function getHintProps(): array
+    public function getHintProps(): array//из этих методов можно построить кастомный файл, который будет определять необходимые опции а также их ед. измерения?
     {
         return [
             'article' => ['ARTICLE', 'ART', 'ARTNUMBER', 'ARTICUL', 'ARTIKUL'],
@@ -269,13 +272,15 @@ class SettingsService
             'width' => ['WIDTH', 'SHIRINA'],
             'height' => ['HEIGHT', 'VISOTA'],
             'picture' => ['PICTURE', 'PICTURE'],
+            'test' => 'test',
+            'test1' => 'test1'
         ];
     }
 
     /**
      * @return array
      */
-    public function getIblockPropsNames(): array
+    public function getIblockPropsNames(): array//переводы для свойств
     {
         return  [
             'article'      => GetMessage('PROPERTY_ARTICLE_HEADER_NAME'),
@@ -287,13 +292,15 @@ class SettingsService
             'width'        => GetMessage('PROPERTY_WIDTH_HEADER_NAME'),
             'height'       => GetMessage('PROPERTY_HEIGHT_HEADER_NAME'),
             'picture'      => GetMessage('PROPERTY_PICTURE_HEADER_NAME'),
+            'test' => 'Тест',
+            'test1' => 'Тест2'
         ];
     }
 
     /**
      * @return array[]
      */
-    public function getIblockFieldsNames(): array
+    public function getIblockFieldsNames(): array//какую переменную брать, не тестилось
     {
         return [
             'weight' => [
@@ -322,7 +329,7 @@ class SettingsService
     /**
      * @return array[]
      */
-    public function getUnitsNames(): array
+    public function getUnitsNames(): array//ед. измерения для свйоств. Не тестилось
     {
         return [
             'length' => [
@@ -341,7 +348,7 @@ class SettingsService
     /**
      * @return string[]
      */
-    public function getHintUnit(): array
+    public function getHintUnit(): array//шо это?
     {
         return [
             'length' => 'mm',
