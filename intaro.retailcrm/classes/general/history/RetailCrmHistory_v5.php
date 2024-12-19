@@ -375,7 +375,31 @@ class RetailCrmHistory
             //orders with changes
             foreach ($orders as $order) {
                 if (function_exists('retailCrmBeforeOrderSave')) {
-                    $newResOrder = retailCrmBeforeOrderSave($order);
+                    if (
+                        !isset($order['customFields']['checkbox'])
+                        || $order['customFields']['checkbox'] !== true
+                        || empty($order['site'])
+                    ) {
+                        continue; //return false; также логирование
+                    }
+
+                    $orderGetResponse = $api->ordersGet($order['id'], 'id', $order['site']);
+
+                    if (
+                        !$orderGetResponse->isSuccessful()
+                        || !$orderGetResponse->offsetExists('order')
+                    ) {
+                        continue; //return false; также логгирование
+                    }
+
+                    $orderEditResponse = $api->ordersEdit(['id' => $order['id'], 'customFields' => ['checkbox' => false]], 'id', $order['site']);
+
+                    if (!$orderEditResponse->isSuccessful()) {
+                        continue; //return false; логгирование
+                    }
+
+                    $newResOrder = $orderGetResponse->offsetGet('order');
+                    //$newResOrder = retailCrmBeforeOrderSave($order);
 
                     if (is_array($newResOrder) && !empty($newResOrder)) {
                         $order = $newResOrder;
