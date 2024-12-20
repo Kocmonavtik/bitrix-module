@@ -46,24 +46,6 @@ class RetailCrmUser
             return false;
         }
 
-
-       /* $userFields = UserFieldTable::getList([
-            'filter' => ['ENTITY_ID' => 'USER'], // Фильтруем только по сущности "USER"
-            'select' => ['FIELD_NAME']
-        ]);*/
-
-        //$result = $api->customDictionariesEdit(['code' => 'partner_list','name' => 'partners', 'elements' => [['name'=> 'test3', 'code' => 'test3']]]);
-        //$result = $api->customDictionariesGet('test1111');
-        //$test = RCrmActions::apiMethod($api, 'customFieldsCreate', __METHOD__, ['test', 'test']);
-        //$test = $api->customFieldsList(['code' => 'adress']);
-        //$test = RCrmActions::apiMethod($api, 'customFieldsList', __METHOD__, $customer, $site)
-        //$newResCustomer = retailCrmBeforeCustomerSend([]);
-
-        //$ar = [];
-
-        //while ($field = $userFields->fetch()) {
-        //    $ar[] = $field['FIELD_NAME'];
-        //}
         $customer = self::getSimpleCustomer($arFields);
         $customer['createdAt'] = new \DateTime($arFields['DATE_REGISTER']);
         $customer['contragent'] = ['contragentType' => $contragentType];
@@ -84,7 +66,7 @@ class RetailCrmUser
             // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
             $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
-            if ($savedCustomEnumFields === []) {
+            if ($savedCustomEnumFields === false) {
                 COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
             }
 
@@ -121,7 +103,7 @@ class RetailCrmUser
 
                     //Получение значения выбранного элемента в списке
                     while ($enumElement = $arEnum->Fetch()) {
-                        if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']], true)) {
+                        if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']])) {
                             //временная конструкция
                             $code = function ($string) {
                                 $translit = "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC; [:Punctuation:] Remove; Lower();";
@@ -136,7 +118,7 @@ class RetailCrmUser
 
                     $listCustomValues[$userField['FIELD_NAME']] = [
                         'items' => $enumItems,
-                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? null,
+                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? random_int(0, 10000),//доработать
                         'isMultiple' => $userField['MULTIPLE'] === 'Y'
                     ];
                 }
@@ -148,12 +130,18 @@ class RetailCrmUser
             }
 
             /**
-             * @var  \RetailCrm\ApiClient $api
+             * @var \RetailCrm\ApiClient $api
              */
             //Заполнение customer и поиск отсутствующих значений
             foreach ($listCustomValues as $codeField => $values) {
                 $crmCode = strtolower($codeField);
-                $customer['customFields'][$crmCode] = array_keys($values['items']);//заполнение кастомных полей
+                $customFieldValue = array_keys($values['items']);//правильная ли логика
+
+                if (!$values['isMultiple'] && count($customFieldValue) === 1) {
+                    $customFieldValue = current($customFieldValue);
+                }
+
+                $customer['customFields'][$crmCode] = $customFieldValue;
 
                 if (!isset($savedCustomEnumFields[$crmCode])) {
                     $elements = [];
@@ -162,15 +150,42 @@ class RetailCrmUser
                         $elements[] = ['name' => $name, 'code' => $code];
                     }
 
-                    $responseDictionaryCreate = $api->customDictionariesCreate(['code' => $crmCode, 'elements' => $elements]);
+                    $responseDictionaryCreate = $api->customDictionariesCreate(['code' => $crmCode,'name' => $values['name'], 'elements' => $elements]);
 
                     if (!$responseDictionaryCreate->isSuccessful()) {
-                        continue; //логгирование
+                        unset($customer['customFields'][$crmCode]);
+
+                        Logger::getInstance()//прописать путь к логам
+                            ->write(
+                                sprintf(
+                                    'Справочник %s не был выгружен. Клиент %s был выгружен без справочника. (Code: %s. Message %s)',
+                                    $codeField,
+                                    $customer['externalId'],
+                                    $responseDictionaryCreate->getStatusCode(),
+                                    implode(';', $responseDictionaryCreate->getResponseBody())
+                                )
+                            )
+                        ;
+
+                        RCrmActions::eventLog(
+                            __CLASS__ . '::' . __METHOD__,
+                            'Bitrix\Sale\Order::create',
+                            sprintf(
+                                'Справочник %s не был выгружен. Клиент %s был выгружен без справочника. (Code: %s. Message %s)',
+                                $codeField,
+                                $customer['externalId'],
+                                $responseDictionaryCreate->getStatusCode(),
+                                implode(';', $responseDictionaryCreate->getResponseBody())
+                            )
+                        );
+
+                        continue;
                     }
 
                     $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => 'multiselect_dictionary', 'dictionary' => $crmCode]);
 
                     if (!$responseCustomFieldCreate->isSuccessful()) {
+                        unset($customer['customFields'][$crmCode]);
                         continue;//логгирование
                     }
 
@@ -178,13 +193,6 @@ class RetailCrmUser
                         $savedCustomEnumFields[$crmCode][$element['code']] = $element['name'];
                     }
 
-                    $customFieldValue = array_keys($values['items']);//правильная ли логика
-
-                    if (!$values['isMultiple'] && count($customFieldValue) === 1) {
-                        $customFieldValue = current($customFieldValue);
-                    }
-
-                    $customer['customFields'][$crmCode] = $customFieldValue;
                     COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                 } elseif (count(array_intersect(array_keys($savedCustomEnumFields[$crmCode]), array_keys($values['items']))) !== count($values['items'])) {
                     $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], $values['items']));//получение полного нового справочника.
@@ -198,19 +206,13 @@ class RetailCrmUser
                         $elements[] = ['name' => $value, 'code' => $code];
                     }
 
-                    $responseDictionaryEdit = $api->customDictionariesEdit(['code' => $crmCode, 'elements' => $elements]);
+                    $responseDictionaryEdit = $api->customDictionariesEdit(['code' => $crmCode, 'name' => $values['name'], 'elements' => $elements]);
 
                     if (!$responseDictionaryEdit->isSuccessful()) {
+                        unset($customer['customFields'][$crmCode]);
                         continue;//логгирование
                     }
 
-                    $customFieldValue = array_keys($values['items']);//правильная ли логика
-
-                    if (!$values['isMultiple'] && count($customFieldValue) === 1) {
-                        $customFieldValue = current($customFieldValue);
-                    }
-
-                    $customer['customFields'][$crmCode] = $customFieldValue;
                     COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                 }
             }
@@ -282,6 +284,143 @@ class RetailCrmUser
             $customer = self::getBooleanFields($customer, $arFields);
 
             if (function_exists('retailCrmBeforeCustomerSend')) {
+                //Следующий код для функции:
+                //Получаем сохраненный список полей. В случае отсутствия - создаем. Код модуля и константа от разработчика (текущие под вопросом)
+                //Пример массива $options = ['uf_test' => ['test1' => 'Название', 'test2' => 'Название2', 'test3' => 'Название 3']], где ключ - это код справочника и кастомного поля. Значения - код справочников
+                // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
+                $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
+
+                if ($savedCustomEnumFields === false) {
+                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
+                }
+
+                // Получаем все кастомные поля объекта USER и его переводы
+                $userFields = UserFieldTable::getList([
+                    'select' => ['ID', 'FIELD_NAME', 'ENTITY_ID', 'USER_TYPE_ID', 'MULTIPLE', 'SETTINGS', 'TITLE'],
+                    'filter' => [
+                        '=ENTITY_ID' => 'USER',
+                        '=MAIN_USER_FIELD_TITLE_LANGUAGE_ID' => 'ru',
+                        'USER_TYPE_ID' => 'enumeration',
+                    ],
+                    'runtime' => [
+                        'TITLE' => [
+                            'data_type' => UserFieldLangTable::getEntity(),
+                            'reference' => [
+                                '=this.ID' => 'ref.USER_FIELD_ID',
+                            ],
+                        ],
+                    ],
+                ])->fetchAll();
+
+                $listCustomValues = [];
+                $enumBuilder = new CUserFieldEnum();
+
+                //сборка всех необходимых параметров
+                foreach ($userFields as $userField) {
+                    if (!isset($userField['FIELD_NAME'])) {
+                        continue;
+                    }
+
+                    if (isset($arFields[$userField['FIELD_NAME']]) && $arFields[$userField['FIELD_NAME']] !== false) {
+                        $arEnum = $enumBuilder->GetList([], ['USER_FIELD_NAME' => $userField['FIELD_NAME']]);
+                        $enumItems = [];
+
+                        //Получение значения выбранного элемента в списке
+                        while ($enumElement = $arEnum->Fetch()) {
+                            if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']])) {
+                                //временная конструкция
+                                $code = function ($string) {
+                                    $translit = "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC; [:Punctuation:] Remove; Lower();";
+                                    $string = transliterator_transliterate($translit, $string);
+                                    $string = preg_replace('/[-\s]+/', '_', $string);
+                                    return trim($string, '-');
+                                };
+
+                                $enumItems[$code($enumElement['VALUE'])] = $enumElement['VALUE'];
+                            }
+                        }
+
+                        $listCustomValues[$userField['FIELD_NAME']] = [
+                            'items' => $enumItems,
+                            'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? random_int(0, 10000),//доработать
+                            'isMultiple' => $userField['MULTIPLE'] === 'Y'
+                        ];
+                    }
+                }
+
+                //Проверка наличия полей
+                if ($listCustomValues === []) {
+                    return $customer;
+                }
+
+                /**
+                 * @var  \RetailCrm\ApiClient $api
+                 */
+                //Заполнение customer и поиск отсутствующих значений
+                foreach ($listCustomValues as $codeField => $values) {
+                    $crmCode = strtolower($codeField);
+                    $customFieldValue = array_keys($values['items']);//правильная ли логика
+
+                    if (!$values['isMultiple'] && count($customFieldValue) === 1) {
+                        $customFieldValue = current($customFieldValue);
+                    }
+
+                    $customer['customFields'][$crmCode] = $customFieldValue;
+
+                    if (!isset($savedCustomEnumFields[$crmCode])) {
+                        $elements = [];
+
+                        foreach ($values['items'] as $code => $name) {
+                            $elements[] = ['name' => $name, 'code' => $code];
+                        }
+
+                        $responseDictionaryCreate = $api->customDictionariesCreate(['code' => $crmCode,'name' => $values['name'], 'elements' => $elements]);
+
+                        if (!$responseDictionaryCreate->isSuccessful()) {
+                            unset($customer['customFields'][$crmCode]);
+                            continue; //логгирование
+                        }
+
+                        $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => 'multiselect_dictionary', 'dictionary' => $crmCode]);
+
+                        if (!$responseCustomFieldCreate->isSuccessful()) {
+                            unset($customer['customFields'][$crmCode]);
+                            continue;//логгирование
+                        }
+
+                        foreach ($elements as $element) {
+                            $savedCustomEnumFields[$crmCode][$element['code']] = $element['name'];
+                        }
+
+                        COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    } elseif (count(array_intersect(array_keys($savedCustomEnumFields[$crmCode]), array_keys($values['items']))) !== count($values['items'])) {
+                        $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], $values['items']));//получение полного нового справочника.
+
+                        $savedCustomEnumFields[$crmCode] = $newDictionaryList;
+
+                        $elements = [];
+
+                        foreach ($newDictionaryList as $code => $value)
+                        {
+                            $elements[] = ['name' => $value, 'code' => $code];
+                        }
+
+                        $responseDictionaryEdit = $api->customDictionariesEdit(['code' => $crmCode, 'name' => $values['name'], 'elements' => $elements]);
+
+                        if (!$responseDictionaryEdit->isSuccessful()) {
+                            unset($customer['customFields'][$crmCode]);
+                            continue;//логгирование
+                        }
+
+                        COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    }
+                }
+
+
+
+
+
+
                 $newResCustomer = retailCrmBeforeCustomerSend($customer);
                 if (is_array($newResCustomer) && !empty($newResCustomer)) {
                     $customer = $newResCustomer;
