@@ -80,7 +80,8 @@ class RetailCrmUser
 
             //Следующий код для функции:
             //Получаем сохраненный список полей. В случае отсутствия - создаем. Код модуля и константа от разработчика (текущие под вопросом)
-            //Пример массива $options = ['uf_test' => ['test1', 'test2', 'test3']], где ключ - это код справочника и кастомного поля. Значения - код справочников
+            //Пример массива $options = ['uf_test' => ['test1' => 'Название', 'test2' => 'Название2', 'test3' => 'Название 3']], где ключ - это код справочника и кастомного поля. Значения - код справочников
+            // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
             $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
             if ($savedCustomEnumFields === []) {
@@ -88,48 +89,24 @@ class RetailCrmUser
             }
 
             // Получаем все кастомные поля объекта USER и его переводы
-            $userFields = UserFieldTable::getList(array (
-                'select'   =>   array ('ID', 'FIELD_NAME', 'ENTITY_ID', 'USER_TYPE_ID', 'MULTIPLE', 'SETTINGS', 'TITLE'),
-                'filter'   =>   array (
-                    '=ENTITY_ID'                     =>   'USER',
-                    '=MAIN_USER_FIELD_TITLE_LANGUAGE_ID'   =>   'ru', 'USER_TYPE_ID' => 'enumeration',
-                ),
-                'runtime'   =>   array (
-                    'TITLE'         =>   array (
-                        'data_type'      =>   UserFieldLangTable::getEntity(),
-                        'reference'      =>   array (
-                            '=this.ID'      =>   'ref.USER_FIELD_ID',
-                        ),
-                    ),
-                ),
-            ))->fetchAll();
-            /*$userFields = UserFieldTable::getList([
-                'filter' => ['ENTITY_ID' => 'USER', 'USER_TYPE_ID' => 'enumeration'], // Фильтруем только по сущности "USER" и получаем только списки
-            ])->fetchAll();*/
-            /*array(1) {
-                [0]=> array(13) {
-                ["ID"]=> string(2) "30"
-                ["FIELD_NAME"]=> string(10) "UF_TEST112"
-                ["ENTITY_ID"]=> string(4) "USER"
-                ["USER_TYPE_ID"]=> string(11) "enumeration"
-                ["MULTIPLE"]=>string(1) "Y"
-                ["SETTINGS"]=>array(4) {
-                    ["DISPLAY"]=> string(4) "LIST"
-                    ["LIST_HEIGHT"]=>int(3)
-                    ["CAPTION_NO_VALUE"]=>string(0) ""
-                    ["SHOW_NO_VALUE"]=string(1) "Y"
-                },
-                ["MAIN_USER_FIELD_TITLE_USER_FIELD_ID"]=>string(2) "30"
-                ["MAIN_USER_FIELD_TITLE_LANGUAGE_ID"]=>string(2) "ru"
-                ["MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL"]=>string(4) "test" --берем вот это
-                ["MAIN_USER_FIELD_TITLE_LIST_COLUMN_LABEL"]=>string(4) "test"
-                ["MAIN_USER_FIELD_TITLE_LIST_FILTER_LABEL"]=>string(4) "test"
-                ["MAIN_USER_FIELD_TITLE_ERROR_MESSAGE"]=>string(4) "test"
-                ["MAIN_USER_FIELD_TITLE_HELP_MESSAGE"]=>string(4) "test"
-            }}*/
+            $userFields = UserFieldTable::getList([
+                'select' => ['ID', 'FIELD_NAME', 'ENTITY_ID', 'USER_TYPE_ID', 'MULTIPLE', 'SETTINGS', 'TITLE'],
+                'filter' => [
+                    '=ENTITY_ID' => 'USER',
+                    '=MAIN_USER_FIELD_TITLE_LANGUAGE_ID' => 'ru',
+                    'USER_TYPE_ID' => 'enumeration',
+                ],
+                'runtime' => [
+                    'TITLE' => [
+                        'data_type' => UserFieldLangTable::getEntity(),
+                        'reference' => [
+                            '=this.ID' => 'ref.USER_FIELD_ID',
+                        ],
+                    ],
+                ],
+            ])->fetchAll();
 
             $listCustomValues = [];
-            $enumerationList = [];
             $enumBuilder = new CUserFieldEnum();
 
             //сборка всех необходимых параметров
@@ -145,23 +122,22 @@ class RetailCrmUser
                     //Получение значения выбранного элемента в списке
                     while ($enumElement = $arEnum->Fetch()) {
                         if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']], true)) {
-
-
                             //временная конструкция
-                            $code = function () use ($enumElement['VALUE']) {
+                            $code = function ($string) {
                                 $translit = "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC; [:Punctuation:] Remove; Lower();";
-                                $string = transliterator_transliterate($translit, $enumElement['VALUE']);
+                                $string = transliterator_transliterate($translit, $string);
                                 $string = preg_replace('/[-\s]+/', '_', $string);
                                 return trim($string, '-');
                             };
 
-                            $enumItems[$code()] = $enumElement['VALUE'];
+                            $enumItems[$code($enumElement['VALUE'])] = $enumElement['VALUE'];
                         }
                     }
 
                     $listCustomValues[$userField['FIELD_NAME']] = [
                         'items' => $enumItems,
-                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? null
+                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? null,
+                        'isMultiple' => $userField['MULTIPLE'] === 'Y'
                     ];
                 }
             }
@@ -171,9 +147,9 @@ class RetailCrmUser
                 return $customer;
             }
 
-            $lossCustomFields = [];
-            $lossEnumFields = [];
-
+            /**
+             * @var  \RetailCrm\ApiClient $api
+             */
             //Заполнение customer и поиск отсутствующих значений
             foreach ($listCustomValues as $codeField => $values) {
                 $crmCode = strtolower($codeField);
@@ -187,32 +163,57 @@ class RetailCrmUser
                     }
 
                     $responseDictionaryCreate = $api->customDictionariesCreate(['code' => $crmCode, 'elements' => $elements]);
+
+                    if (!$responseDictionaryCreate->isSuccessful()) {
+                        continue; //логгирование
+                    }
+
                     $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => 'multiselect_dictionary', 'dictionary' => $crmCode]);
 
-                    $savedCustomEnumFields[$crmCode] = array_column($elements, 'code');
-                    //проверка добавление и в случае чего откат
+                    if (!$responseCustomFieldCreate->isSuccessful()) {
+                        continue;//логгирование
+                    }
+
+                    foreach ($elements as $element) {
+                        $savedCustomEnumFields[$crmCode][$element['code']] = $element['name'];
+                    }
+
+                    $customFieldValue = array_keys($values['items']);//правильная ли логика
+
+                    if (!$values['isMultiple'] && count($customFieldValue) === 1) {
+                        $customFieldValue = current($customFieldValue);
+                    }
+
+                    $customer['customFields'][$crmCode] = $customFieldValue;
+                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                } elseif (count(array_intersect(array_keys($savedCustomEnumFields[$crmCode]), array_keys($values['items']))) !== count($values['items'])) {
+                    $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], $values['items']));//получение полного нового справочника.
+
+                    $savedCustomEnumFields[$crmCode] = $newDictionaryList;
+
+                    $elements = [];
+
+                    foreach ($newDictionaryList as $code => $value)
+                    {
+                        $elements[] = ['name' => $value, 'code' => $code];
+                    }
+
+                    $responseDictionaryEdit = $api->customDictionariesEdit(['code' => $crmCode, 'elements' => $elements]);
+
+                    if (!$responseDictionaryEdit->isSuccessful()) {
+                        continue;//логгирование
+                    }
+
+                    $customFieldValue = array_keys($values['items']);//правильная ли логика
+
+                    if (!$values['isMultiple'] && count($customFieldValue) === 1) {
+                        $customFieldValue = current($customFieldValue);
+                    }
+
+                    $customer['customFields'][$crmCode] = $customFieldValue;
+                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                 }
-
-                if (count(array_intersect($savedCustomEnumFields[$crmCode], array_keys($values['items']))) !== count($values['items'])) {
-                    $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], array_keys($values['items'])));
-
-                    $elements = []; // тут проблема. Нету названий справочника, т.к. мы получили их из $savedCustomEnumFields в котором только коды.
-                    //Возможно стоит добавить в сохраняемых массив и названия, что успростит работу, т.к. не придется вызывать new CUserFieldEnum(); в данном участке кода?
-                    //Или же дополнительно искать те, которые мы не заполнили, в холостую в итоге работает все равно. А лучше тупо все написать в логике CUserFieldEnum() и там фиксировать новые элементы!!!!!!
-
-
-                }
-
-
-                //Отправка запросов в систему с поиском кастомного поля и справочника по ключу (одинаковый код у поля и справочника)
-                //При отсутствии - создаем. При наличии - проверяем наличия значения в справочнике.
-                // Производим транслитерацию значения в списке для записи кода. (Или же пишем value_1 ...)
-                //записываем в customer['customFields'][код] выбранные значения
             }
-
-            //Инициализация апи-клиента retailcrm
-
-            //Возвращаем customer
 
             $newResCustomer = retailCrmBeforeCustomerSend($customer);
 
