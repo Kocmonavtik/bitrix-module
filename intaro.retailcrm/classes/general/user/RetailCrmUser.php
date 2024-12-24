@@ -66,7 +66,7 @@ class RetailCrmUser
             // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
             $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
-            if ($savedCustomEnumFields === false) {
+            if (!$savedCustomEnumFields) {
                 COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
             }
 
@@ -97,13 +97,18 @@ class RetailCrmUser
                     continue;
                 }
 
-                if (isset($arFields[$userField['FIELD_NAME']]) && $arFields[$userField['FIELD_NAME']] !== false) {
+                if (isset($arFields[$userField['FIELD_NAME']]) && !empty($arFields[$userField['FIELD_NAME']])) {
                     $arEnum = $enumBuilder->GetList([], ['USER_FIELD_NAME' => $userField['FIELD_NAME']]);
                     $enumItems = [];
 
                     //Получение значения выбранного элемента в списке
                     while ($enumElement = $arEnum->Fetch()) {
-                        if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']])) {
+                        $enumValue = $arFields[$userField['FIELD_NAME']];
+
+                        if (
+                            (!is_array($enumValue) && $enumElement['ID'] == $enumValue)
+                            || (is_array($enumValue) && in_array($enumElement['ID'], $enumValue))
+                        ) {
                             //временная конструкция
                             $code = function ($string) {
                                 $translit = "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC; [:Punctuation:] Remove; Lower();";
@@ -118,7 +123,7 @@ class RetailCrmUser
 
                     $listCustomValues[$userField['FIELD_NAME']] = [
                         'items' => $enumItems,
-                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? random_int(0, 10000),//доработать
+                        'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? strtolower($userField['FIELD_NAME']),
                         'isMultiple' => $userField['MULTIPLE'] === 'Y'
                     ];
                 }
@@ -135,7 +140,7 @@ class RetailCrmUser
             //Заполнение customer и поиск отсутствующих значений
             foreach ($listCustomValues as $codeField => $values) {
                 $crmCode = strtolower($codeField);
-                $customFieldValue = array_keys($values['items']);//правильная ли логика
+                $customFieldValue = array_keys($values['items']);
 
                 if (!$values['isMultiple'] && count($customFieldValue) === 1) {
                     $customFieldValue = current($customFieldValue);
@@ -167,22 +172,11 @@ class RetailCrmUser
                             )
                         ;
 
-                        RCrmActions::eventLog(
-                            __CLASS__ . '::' . __METHOD__,
-                            'Bitrix\Sale\Order::create',
-                            sprintf(
-                                'Справочник %s не был выгружен. Клиент %s был выгружен без справочника. (Code: %s. Message %s)',
-                                $codeField,
-                                $customer['externalId'],
-                                $responseDictionaryCreate->getStatusCode(),
-                                implode(';', $responseDictionaryCreate->getResponseBody())
-                            )
-                        );
-
                         continue;
                     }
 
-                    $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => 'multiselect_dictionary', 'dictionary' => $crmCode]);
+                    $fieldType = $values['isMultiple'] ? 'multiselect_dictionary' : 'dictionary';
+                    $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => $fieldType, 'dictionary' => $crmCode]);
 
                     if (!$responseCustomFieldCreate->isSuccessful()) {
                         unset($customer['customFields'][$crmCode]);
@@ -290,8 +284,10 @@ class RetailCrmUser
                 // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
                 $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
-                if ($savedCustomEnumFields === false) {
+                if (!$savedCustomEnumFields) {
                     COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
+
+                    $savedCustomEnumFields = [];
                 }
 
                 // Получаем все кастомные поля объекта USER и его переводы
@@ -321,13 +317,18 @@ class RetailCrmUser
                         continue;
                     }
 
-                    if (isset($arFields[$userField['FIELD_NAME']]) && $arFields[$userField['FIELD_NAME']] !== false) {
+                    if (isset($arFields[$userField['FIELD_NAME']]) && !empty($arFields[$userField['FIELD_NAME']])) {
                         $arEnum = $enumBuilder->GetList([], ['USER_FIELD_NAME' => $userField['FIELD_NAME']]);
                         $enumItems = [];
 
                         //Получение значения выбранного элемента в списке
                         while ($enumElement = $arEnum->Fetch()) {
-                            if (in_array($enumElement['ID'], $arFields[$userField['FIELD_NAME']])) {
+                            $enumValue = $arFields[$userField['FIELD_NAME']];
+
+                            if (
+                                (!is_array($enumValue) && $enumElement['ID'] == $enumValue)
+                                || (is_array($enumValue) && in_array($enumElement['ID'], $enumValue))
+                            ) {
                                 //временная конструкция
                                 $code = function ($string) {
                                     $translit = "Any-Latin; NFD; [:Nonspacing Mark:] Remove; NFC; [:Punctuation:] Remove; Lower();";
@@ -342,7 +343,7 @@ class RetailCrmUser
 
                         $listCustomValues[$userField['FIELD_NAME']] = [
                             'items' => $enumItems,
-                            'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? random_int(0, 10000),//доработать
+                            'name' => $userField['MAIN_USER_FIELD_TITLE_EDIT_FORM_LABEL'] ?? strtolower($userField['FIELD_NAME']),
                             'isMultiple' => $userField['MULTIPLE'] === 'Y'
                         ];
                     }
@@ -354,12 +355,12 @@ class RetailCrmUser
                 }
 
                 /**
-                 * @var  \RetailCrm\ApiClient $api
+                 * @var \RetailCrm\ApiClient $api
                  */
                 //Заполнение customer и поиск отсутствующих значений
                 foreach ($listCustomValues as $codeField => $values) {
                     $crmCode = strtolower($codeField);
-                    $customFieldValue = array_keys($values['items']);//правильная ли логика
+                    $customFieldValue = array_keys($values['items']);
 
                     if (!$values['isMultiple'] && count($customFieldValue) === 1) {
                         $customFieldValue = current($customFieldValue);
@@ -378,10 +379,24 @@ class RetailCrmUser
 
                         if (!$responseDictionaryCreate->isSuccessful()) {
                             unset($customer['customFields'][$crmCode]);
-                            continue; //логгирование
+
+                            Logger::getInstance()//прописать путь к логам
+                            ->write(
+                                sprintf(
+                                    'Справочник %s не был выгружен. Клиент %s был выгружен без справочника. (Code: %s. Message %s)',
+                                    $codeField,
+                                    $customer['externalId'],
+                                    $responseDictionaryCreate->getStatusCode(),
+                                    implode(';', $responseDictionaryCreate->getResponseBody())
+                                )
+                            )
+                            ;
+
+                            continue;
                         }
 
-                        $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => 'multiselect_dictionary', 'dictionary' => $crmCode]);
+                        $fieldType = $values['isMultiple'] ? 'multiselect_dictionary' : 'dictionary';
+                        $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => $fieldType, 'dictionary' => $crmCode]);
 
                         if (!$responseCustomFieldCreate->isSuccessful()) {
                             unset($customer['customFields'][$crmCode]);
