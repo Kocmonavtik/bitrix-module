@@ -14,6 +14,11 @@ IncludeModuleLangFile(__FILE__);
 use Bitrix\Main\UserTable;
 use Bitrix\Main\UserFieldTable;
 use Bitrix\Main\UserFieldLangTable;
+use Bitrix\Main\Config\Option;
+use Bitrix\Main\Diag\FileLogger;
+use Intaro\RetailCrm\Component\ConfigProvider;
+use RetailCrm\ApiClient;
+use CUserFieldEnum;
 
 /**
  * Class RetailCrmUser
@@ -47,6 +52,10 @@ class RetailCrmUser
         }
 
         $customer = self::getSimpleCustomer($arFields);
+
+        $user = CUser::GetByID($customer['externalId']);
+        $test = $user->Fetch();
+
         $customer['createdAt'] = new \DateTime($arFields['DATE_REGISTER']);
         $customer['contragent'] = ['contragentType' => $contragentType];
 
@@ -64,10 +73,11 @@ class RetailCrmUser
             //Получаем сохраненный список полей. В случае отсутствия - создаем. Код модуля и константа от разработчика (текущие под вопросом)
             //Пример массива $options = ['uf_test' => ['test1' => 'Название', 'test2' => 'Название2', 'test3' => 'Название 3']], где ключ - это код справочника и кастомного поля. Значения - код справочников
             // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
-            $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
+            //$savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
+            $savedCustomEnumFields = unserialize(Option::get('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
             if (!$savedCustomEnumFields) {
-                COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
+                Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
             }
 
             // Получаем все кастомные поля объекта USER и его переводы
@@ -187,7 +197,8 @@ class RetailCrmUser
                         $savedCustomEnumFields[$crmCode][$element['code']] = $element['name'];
                     }
 
-                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    //COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                 } elseif (count(array_intersect(array_keys($savedCustomEnumFields[$crmCode]), array_keys($values['items']))) !== count($values['items'])) {
                     $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], $values['items']));//получение полного нового справочника.
 
@@ -207,7 +218,8 @@ class RetailCrmUser
                         continue;//логгирование
                     }
 
-                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                    //COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                 }
             }
 
@@ -244,6 +256,8 @@ class RetailCrmUser
 
     public static function customerEdit($arFields, $api, $optionsSitesList = array()) : bool
     {
+        $api = new ApiClient(ConfigProvider::getApiUrl(), ConfigProvider::getApiKey());
+
         if (empty($arFields)) {
             RCrmActions::eventLog('RetailCrmUser::customerEdit', 'empty($arFields)', 'incorrect customer');
             return false;
@@ -251,6 +265,11 @@ class RetailCrmUser
 
         $customer = self::getSimpleCustomer($arFields);
         $found = false;
+
+        $user = CUser::GetByID(9999999)->Fetch();
+        //$test = $user->Fetch();
+
+        $customer['createdAt'] = new \DateTime($arFields['DATE_REGISTER']);
 
         if (RetailcrmConfigProvider::getCustomFieldsStatus() === 'Y') {
             $customer['customFields'] = self::getCustomFields($arFields);
@@ -282,12 +301,11 @@ class RetailCrmUser
                 //Получаем сохраненный список полей. В случае отсутствия - создаем. Код модуля и константа от разработчика (текущие под вопросом)
                 //Пример массива $options = ['uf_test' => ['test1' => 'Название', 'test2' => 'Название2', 'test3' => 'Название 3']], где ключ - это код справочника и кастомного поля. Значения - код справочников
                 // Может быть добавить сюда ещё id поля спрачоника, тогда обойдем вариант постоянного поиска кодов. Но не особо безопасно, т.к. вариант в справочнике может быть переименован.
-                $savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
+                //$savedCustomEnumFields = unserialize(COption::GetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
+                $savedCustomEnumFields = unserialize(Option::get('intaro.retailcrm', 'saved_custom_enum_fields', 0), []);
 
                 if (!$savedCustomEnumFields) {
-                    COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
-
-                    $savedCustomEnumFields = [];
+                    Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize([]));
                 }
 
                 // Получаем все кастомные поля объекта USER и его переводы
@@ -407,7 +425,8 @@ class RetailCrmUser
                             $savedCustomEnumFields[$crmCode][$element['code']] = $element['name'];
                         }
 
-                        COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                        Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                        //COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                     } elseif (count(array_intersect(array_keys($savedCustomEnumFields[$crmCode]), array_keys($values['items']))) !== count($values['items'])) {
                         $newDictionaryList = array_unique(array_merge($savedCustomEnumFields[$crmCode], $values['items']));//получение полного нового справочника.
 
@@ -427,7 +446,8 @@ class RetailCrmUser
                             continue;//логгирование
                         }
 
-                        COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                        Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
+                        //COption::SetOptionString('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
                     }
                 }
 
