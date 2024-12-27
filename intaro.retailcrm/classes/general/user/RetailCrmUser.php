@@ -165,9 +165,13 @@ class RetailCrmUser
                         $elements[] = ['name' => $name, 'code' => $code];
                     }
 
-                    $responseDictionaryCreate = $api->customDictionariesCreate(['code' => $crmCode,'name' => $values['name'], 'elements' => $elements]);
+                    if ($api->customDictionariesGet($crmCode)->isSuccessful()) {
+                        $responseDictionary = $api->customDictionariesEdit(['code' => $crmCode, 'name' => $values['name'], 'elements' => $elements]);
+                    } else {
+                        $responseDictionary = $api->customDictionariesCreate(['code' => $crmCode,'name' => $values['name'], 'elements' => $elements]);
+                    }
 
-                    if (!$responseDictionaryCreate->isSuccessful()) {
+                    if (!$responseDictionary->isSuccessful()) {
                         unset($customer['customFields'][$crmCode]);
 
                         Logger::getInstance()//прописать путь к логам
@@ -176,8 +180,8 @@ class RetailCrmUser
                                     'Справочник %s не был выгружен. Клиент %s был выгружен без справочника. (Code: %s. Message %s)',
                                     $codeField,
                                     $customer['externalId'],
-                                    $responseDictionaryCreate->getStatusCode(),
-                                    implode(';', $responseDictionaryCreate->getResponseBody())
+                                    $responseDictionary->getStatusCode(),
+                                    implode(';', $responseDictionary->getResponseBody())
                                 )
                             )
                         ;
@@ -185,12 +189,14 @@ class RetailCrmUser
                         continue;
                     }
 
-                    $fieldType = $values['isMultiple'] ? 'multiselect_dictionary' : 'dictionary';
-                    $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => $fieldType, 'dictionary' => $crmCode]);
+                    if (!$api->customFieldsGet('customer', $crmCode)->isSuccessful()) {
+                        $fieldType = $values['isMultiple'] ? 'multiselect_dictionary' : 'dictionary';
+                        $responseCustomFieldCreate = $api->customFieldsCreate('customer', ['code' => $crmCode, 'name' => $values['name'], 'type' => $fieldType, 'dictionary' => $crmCode]);
 
-                    if (!$responseCustomFieldCreate->isSuccessful()) {
-                        unset($customer['customFields'][$crmCode]);
-                        continue;//логгирование
+                        if (!$responseCustomFieldCreate->isSuccessful()) {
+                            unset($customer['customFields'][$crmCode]);
+                            continue;//логгирование
+                        }
                     }
 
                     foreach ($elements as $element) {
@@ -215,7 +221,7 @@ class RetailCrmUser
 
                     if (!$responseDictionaryEdit->isSuccessful()) {
                         unset($customer['customFields'][$crmCode]);
-                        continue;//логгирование
+                        continue;
                     }
 
                     Option::set('intaro.retailcrm', 'saved_custom_enum_fields', serialize($savedCustomEnumFields));
